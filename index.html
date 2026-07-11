@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=600, height=600, initial-scale=1, user-scalable=no" />
+<title>Vitals — Ultrahuman</title>
+<style>
+  :root {
+    --bg: #000;
+    --fg: #ffffff;
+    --dim: #8a8a8a;
+    --accent: #59c3ff;
+    --warn: #ff5c5c;
+    --card-border: #2a2a2a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    width: 600px;
+    height: 600px;
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    overflow: hidden;
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  #app { width: 600px; height: 600px; position: relative; }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+  .screen.active { display: flex; }
+
+  .label {
+    font-size: 26px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 10px;
+  }
+  .value-row { display: flex; align-items: baseline; gap: 10px; }
+  .value {
+    font-size: 140px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--accent);
+  }
+  .value.small { font-size: 100px; }
+  .unit { font-size: 36px; color: var(--dim); }
+  .sub { margin-top: 16px; font-size: 24px; color: var(--dim); text-align: center; }
+  .value.stale { color: var(--warn); }
+
+  /* secondary line for cards with two related numbers, e.g. HR + night RHR */
+  .secondary-row {
+    margin-top: 22px;
+    display: flex;
+    gap: 34px;
+  }
+  .secondary {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .secondary .num { font-size: 40px; font-weight: 600; }
+  .secondary .lbl { font-size: 18px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+
+  .dots {
+    position: absolute;
+    bottom: 34px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+  }
+  .dot { width: 13px; height: 13px; border-radius: 50%; background: #333; }
+  .dot.on { background: var(--accent); }
+
+  .status {
+    position: absolute;
+    top: 26px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    font-size: 20px;
+    color: var(--dim);
+  }
+  .status .pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+  .status.offline .pulse { background: var(--warn); }
+
+  .focusable {
+    min-height: 88px;
+    min-width: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 28px;
+    border: 2px solid var(--card-border);
+    border-radius: 16px;
+    font-size: 28px;
+    color: var(--fg);
+    background: transparent;
+    transition: all 150ms ease;
+  }
+  .focusable:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px rgba(89,195,255,0.25);
+  }
+
+  .error-title { font-size: 34px; color: var(--warn); margin-bottom: 16px; text-align: center; }
+  .error-sub { font-size: 22px; color: var(--dim); margin-bottom: 26px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="status" id="status">
+    <div class="pulse"></div>
+    <span id="status-text">Live</span>
+  </div>
+
+  <!-- Card 0: Recovery -->
+  <div class="screen active" data-card="0">
+    <div class="label">Recovery</div>
+    <div class="value-row">
+      <span class="value" id="recovery-value">--</span>
+    </div>
+    <div class="sub" id="recovery-sub">waiting for data</div>
+  </div>
+
+  <!-- Card 1: Sleep score -->
+  <div class="screen" data-card="1">
+    <div class="label">Sleep Score</div>
+    <div class="value-row">
+      <span class="value" id="sleep-value">--</span>
+      <span class="unit">/100</span>
+    </div>
+    <div class="sub" id="sleep-sub">waiting for data</div>
+  </div>
+
+  <!-- Card 2: Heart rate + night RHR -->
+  <div class="screen" data-card="2">
+    <div class="label">Heart Rate</div>
+    <div class="value-row">
+      <span class="value" id="hr-value">--</span>
+      <span class="unit">bpm</span>
+    </div>
+    <div class="secondary-row">
+      <div class="secondary">
+        <span class="num" id="rhr-value">--</span>
+        <span class="lbl">Night RHR</span>
+      </div>
+      <div class="secondary">
+        <span class="num" id="hrv-value">--</span>
+        <span class="lbl">HRV</span>
+      </div>
+    </div>
+    <div class="sub" id="hr-sub">waiting for data</div>
+  </div>
+
+  <!-- Card 3: SpO2 + VO2 max -->
+  <div class="screen" data-card="3">
+    <div class="label">Blood Oxygen</div>
+    <div class="value-row">
+      <span class="value" id="spo2-value">--</span>
+      <span class="unit">%</span>
+    </div>
+    <div class="secondary-row">
+      <div class="secondary">
+        <span class="num" id="vo2-value">--</span>
+        <span class="lbl">VO2 Max</span>
+      </div>
+      <div class="secondary">
+        <span class="num" id="movement-value">--</span>
+        <span class="lbl">Movement</span>
+      </div>
+    </div>
+    <div class="sub" id="spo2-sub">waiting for data</div>
+  </div>
+
+  <!-- Card 4: Glucose (only shown if present in response) -->
+  <div class="screen" data-card="4" id="glucose-card">
+    <div class="label">Avg Glucose</div>
+    <div class="value-row">
+      <span class="value small" id="glucose-value">--</span>
+      <span class="unit">mg/dL</span>
+    </div>
+    <div class="sub" id="glucose-sub">waiting for data</div>
+  </div>
+
+  <!-- Error screen -->
+  <div class="screen" data-card="error">
+    <div class="error-title">Can't reach vitals bridge</div>
+    <div class="error-sub" id="error-detail">Check that ultrahuman-bridge is running and reachable.</div>
+    <button class="focusable" id="retry-btn">Retry</button>
+  </div>
+
+  <div class="dots" id="dots">
+    <div class="dot on" data-dot="0"></div>
+    <div class="dot" data-dot="1"></div>
+    <div class="dot" data-dot="2"></div>
+    <div class="dot" data-dot="3"></div>
+    <div class="dot" data-dot="4"></div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------
+  // CONFIG — point this at wherever ultrahuman-bridge/server.js is running.
+  // e.g. "http://192.168.1.50:8788/vitals" on your home network, or a
+  // public URL if you deployed the bridge (see ultrahuman-bridge/README.md).
+  // ---------------------------------------------------------------------
+  const VITALS_ENDPOINT = "https://healthringwebapp.onrender.com/vitals";
+  const POLL_INTERVAL_MS = 60000; // vitals don't change second-to-second; poll gently
+  const STALE_AFTER_MS = 30 * 60 * 1000; // mark stale after 30 min with no fresh update
+
+  const DPAD = {
+    UP: "ArrowUp", DOWN: "ArrowDown", LEFT: "ArrowLeft", RIGHT: "ArrowRight",
+    SELECT: "Enter", BACK: "Escape",
+  };
+
+  let cards = Array.from(document.querySelectorAll(".screen[data-card]"))
+    .filter(el => el.dataset.card !== "error");
+  const errorScreen = document.querySelector('.screen[data-card="error"]');
+  const glucoseCard = document.getElementById("glucose-card");
+  const dotsEl = document.getElementById("dots");
+  const statusEl = document.getElementById("status");
+  const statusText = document.getElementById("status-text");
+  const retryBtn = document.getElementById("retry-btn");
+  retryBtn.classList.add("focusable");
+
+  let currentIndex = 0;
+  let lastGoodData = loadCache();
+  let glucoseAvailable = false;
+
+  function loadCache() {
+    try {
+      const raw = localStorage.getItem("uh-vitals-cache");
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+  function saveCache(data) {
+    try { localStorage.setItem("uh-vitals-cache", JSON.stringify(data)); } catch (e) {}
+  }
+
+  function updateVisibleCards() {
+    // Hide the glucose card entirely if the bridge never reports a value
+    // (e.g. no CGM paired) so the dots/deck don't have a permanently dead stop.
+    cards = Array.from(document.querySelectorAll(".screen[data-card]"))
+      .filter(el => el.dataset.card !== "error" && (el !== glucoseCard || glucoseAvailable));
+    Array.from(dotsEl.children).forEach((d, i) => {
+      d.style.display = i < cards.length ? "block" : "none";
+    });
+    if (currentIndex >= cards.length) currentIndex = 0;
+  }
+
+  function showCard(index) {
+    if (index === "error") {
+      cards.forEach(c => c.classList.remove("active"));
+      errorScreen.classList.add("active");
+      dotsEl.style.display = "none";
+      return;
+    }
+    dotsEl.style.display = "flex";
+    errorScreen.classList.remove("active");
+    document.querySelectorAll(".screen[data-card]").forEach(c => c.classList.remove("active"));
+    cards[index].classList.add("active");
+    Array.from(dotsEl.children).forEach((d, i) => d.classList.toggle("on", i === index));
+  }
+
+  function moveCard(delta) {
+    currentIndex = (currentIndex + delta + cards.length) % cards.length;
+    showCard(currentIndex);
+  }
+
+  function fmt(n, decimals) {
+    if (n === null || n === undefined || n === "") return "--";
+    const num = Number(n);
+    if (Number.isNaN(num)) return "--";
+    return decimals ? num.toFixed(decimals) : Math.round(num);
+  }
+
+  function timeAgoLabel(ts, isFresh) {
+    if (!ts) return "no data yet";
+    const secs = Math.round((Date.now() - new Date(ts).getTime()) / 1000);
+    let label;
+    if (secs < 60) label = secs + "s ago";
+    else if (secs < 3600) label = Math.round(secs / 60) + "m ago";
+    else label = Math.round(secs / 3600) + "h ago";
+    return isFresh ? "updated " + label : "stale · " + label;
+  }
+
+  function render(data, isFresh) {
+    const staleClass = isFresh ? "" : "stale";
+    const sub = timeAgoLabel(data && data.lastUpdated, isFresh);
+
+    setText("recovery-value", fmt(data && data.recovery), staleClass);
+    document.getElementById("recovery-sub").textContent = sub;
+
+    setText("sleep-value", fmt(data && data.sleepScore), staleClass);
+    document.getElementById("sleep-sub").textContent = sub;
+
+    setText("hr-value", fmt(data && data.heartRate), staleClass);
+    document.getElementById("rhr-value").textContent = fmt(data && data.nightRhr);
+    document.getElementById("hrv-value").textContent = fmt(data && data.hrv);
+    document.getElementById("hr-sub").textContent = sub;
+
+    setText("spo2-value", fmt(data && data.spo2), staleClass);
+    document.getElementById("vo2-value").textContent = fmt(data && data.vo2Max, 1);
+    document.getElementById("movement-value").textContent = fmt(data && data.movementIndex);
+    document.getElementById("spo2-sub").textContent = sub;
+
+    glucoseAvailable = !!(data && data.averageGlucose != null);
+    setText("glucose-value", fmt(data && data.averageGlucose), staleClass);
+    document.getElementById("glucose-sub").textContent = sub;
+    updateVisibleCards();
+  }
+
+  function setText(id, text, extraClass) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = "value" + (id.includes("glucose") ? " small" : "") + (extraClass ? " " + extraClass : "");
+  }
+
+  async function fetchVitals() {
+    try {
+      const res = await fetch(VITALS_ENDPOINT, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+      data.lastUpdated = data.lastUpdated || new Date().toISOString();
+      lastGoodData = data;
+      saveCache(data);
+      setOnlineStatus(true);
+      if (errorScreen.classList.contains("active")) showCard(currentIndex);
+      const isFresh = (Date.now() - new Date(data.lastUpdated).getTime()) < STALE_AFTER_MS;
+      render(data, isFresh);
+    } catch (err) {
+      setOnlineStatus(false);
+      if (lastGoodData) {
+        render(lastGoodData, false);
+      } else {
+        document.getElementById("error-detail").textContent =
+          "Couldn't reach " + VITALS_ENDPOINT + ". Make sure ultrahuman-bridge is running.";
+        showCard("error");
+      }
+    }
+  }
+
+  function setOnlineStatus(online) {
+    statusEl.classList.toggle("offline", !online);
+    statusText.textContent = online ? "Live" : "Offline";
+  }
+
+  document.addEventListener("keydown", function (e) {
+    switch (e.key) {
+      case DPAD.LEFT: moveCard(-1); break;
+      case DPAD.RIGHT: moveCard(1); break;
+      case DPAD.SELECT: fetchVitals(); break;
+      case DPAD.UP:
+      case DPAD.DOWN: break;
+      default: return;
+    }
+    e.preventDefault();
+  });
+
+  retryBtn.addEventListener("click", fetchVitals);
+
+  if (lastGoodData) {
+    glucoseAvailable = !!(lastGoodData.averageGlucose != null);
+    render(lastGoodData, false);
+  }
+
+  fetchVitals();
+  setInterval(fetchVitals, POLL_INTERVAL_MS);
+})();
+</script>
+</body>
+</html>
