@@ -191,8 +191,37 @@
     <div class="sub" id="spo2-sub">waiting for data</div>
   </div>
 
-  <!-- Card 4: Glucose (only shown if present in response) -->
-  <div class="screen" data-card="4" id="glucose-card">
+  <!-- Card 4: Activity — steps, calories, active minutes -->
+  <div class="screen" data-card="4">
+    <div class="label">Steps</div>
+    <div class="value-row">
+      <span class="value" id="steps-value">--</span>
+    </div>
+    <div class="secondary-row">
+      <div class="secondary">
+        <span class="num" id="calories-value">--</span>
+        <span class="lbl">Calories</span>
+      </div>
+      <div class="secondary">
+        <span class="num" id="active-min-value">--</span>
+        <span class="lbl">Active Min</span>
+      </div>
+    </div>
+    <div class="sub" id="steps-sub">waiting for data</div>
+  </div>
+
+  <!-- Card 5: Temperature (deviation from personal baseline, not absolute) -->
+  <div class="screen" data-card="5">
+    <div class="label">Temperature</div>
+    <div class="value-row">
+      <span class="value" id="temp-value">--</span>
+      <span class="unit">&deg;</span>
+    </div>
+    <div class="sub" id="temp-sub">vs. your baseline</div>
+  </div>
+
+  <!-- Card 6: Glucose (only shown if present in response) -->
+  <div class="screen" data-card="6" id="glucose-card">
     <div class="label">Avg Glucose</div>
     <div class="value-row">
       <span class="value small" id="glucose-value">--</span>
@@ -214,6 +243,8 @@
     <div class="dot" data-dot="2"></div>
     <div class="dot" data-dot="3"></div>
     <div class="dot" data-dot="4"></div>
+    <div class="dot" data-dot="5"></div>
+    <div class="dot" data-dot="6"></div>
   </div>
 
 </div>
@@ -324,6 +355,20 @@
     document.getElementById("vo2-value").textContent = fmt(data && data.vo2Max, 1);
     document.getElementById("movement-value").textContent = fmt(data && data.movementIndex);
     document.getElementById("spo2-sub").textContent = sub;
+
+    setText("steps-value", fmt(data && data.steps), staleClass);
+    document.getElementById("calories-value").textContent = fmt(data && data.caloriesBurned);
+    document.getElementById("active-min-value").textContent = fmt(data && data.activeMinutes);
+    document.getElementById("steps-sub").textContent = sub;
+
+    const tempEl = document.getElementById("temp-value");
+    if (data && data.temperature != null && !Number.isNaN(Number(data.temperature))) {
+      const t = Number(data.temperature);
+      tempEl.textContent = (t > 0 ? "+" : "") + t.toFixed(1);
+    } else {
+      tempEl.textContent = "--";
+    }
+    tempEl.className = "value" + (staleClass ? " " + staleClass : "");
 
     glucoseAvailable = !!(data && data.averageGlucose != null);
     setText("glucose-value", fmt(data && data.averageGlucose), staleClass);
